@@ -1,0 +1,6 @@
+{
+  "name": "AIの「もっともらしい嘘」見破りゲーム",
+  "description": "AIがリアルタイムで生成するもっともらしい嘘（ファクトエラー）を、文節を直接クリックして見破るクイズゲーム。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
