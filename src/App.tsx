@@ -16,8 +16,12 @@ import {
   XCircle,
   Compass,
   ArrowRight,
-  RefreshCw
+  RefreshCw,
+  Volume2,
+  VolumeX
 } from "lucide-react";
+
+import { sound } from "./utils/sound";
 
 // Types corresponding to backend
 interface Question {
@@ -64,15 +68,41 @@ export default function App() {
   const [seenQuestionIds, setSeenQuestionIds] = useState<string[]>([]);
   const [hasChangedThisQuestion, setHasChangedThisQuestion] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return sound.getMuteStatus();
+    }
+    return false;
+  });
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Clean timer on unmount
+  // Clean timer & sound on unmount
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      sound.stopBGM();
     };
   }, []);
+
+  // Control BGM based on game state and mute status
+  useEffect(() => {
+    const activeBgmStates: GameState[] = ["PLAYING", "FEEDBACK", "LOADING"];
+    if (activeBgmStates.includes(gameState) && !isMuted) {
+      sound.startBGM();
+    } else {
+      sound.stopBGM();
+    }
+  }, [gameState, isMuted]);
+
+  const handleToggleMute = () => {
+    const nextMute = !isMuted;
+    setIsMuted(nextMute);
+    sound.setMute(nextMute);
+    if (!nextMute) {
+      sound.playClick();
+    }
+  };
 
   // Timer countdown logic
   useEffect(() => {
@@ -199,15 +229,21 @@ export default function App() {
     if (timerRef.current) clearInterval(timerRef.current);
     setSelectedIndex(index);
 
+    // Play tactile mechanical key/click sound
+    sound.playClick();
+
     const isCorrect = index === currentQuestion.incorrect_segment_index;
     setIsCorrectFeedback(isCorrect);
 
     if (isCorrect) {
       setScore((prev) => prev + 1);
       setFeedbackType("CORRECT");
+      // Delay slightly or play immediately
+      sound.playCorrect();
     } else {
       setLives((prev) => prev - 1);
       setFeedbackType("INCORRECT");
+      sound.playIncorrect();
     }
 
     setGameState("FEEDBACK");
@@ -219,6 +255,7 @@ export default function App() {
     setIsCorrectFeedback(false);
     setLives((prev) => prev - 1);
     setFeedbackType("TIMEOUT");
+    sound.playTimeUp();
     setGameState("FEEDBACK");
   };
 
@@ -235,6 +272,8 @@ export default function App() {
 
   const handleChangeQuestion = () => {
     if (!currentQuestion || gameState !== "PLAYING" || hasChangedThisQuestion) return;
+    
+    sound.playChange();
     
     const realId = currentQuestion.baseId || currentQuestion.id;
     const nextSeenIds = [...seenQuestionIds];
@@ -261,11 +300,25 @@ export default function App() {
       <div className="h-1 bg-gray-900 w-full"></div>
 
       <header className="max-w-4xl mx-auto w-full px-6 pt-6 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <div className="bg-gray-900 text-white p-1.5 rounded-lg">
-            <Brain className="w-5 h-5" />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="bg-gray-900 text-white p-1.5 rounded-lg">
+              <Brain className="w-5 h-5" />
+            </div>
+            <span className="font-mono text-sm tracking-widest font-bold uppercase text-gray-600">PROMPT NOIR</span>
           </div>
-          <span className="font-mono text-sm tracking-widest font-bold uppercase text-gray-600">PROMPT NOIR</span>
+
+          <button
+            onClick={handleToggleMute}
+            className="flex items-center justify-center p-1.5 rounded-lg hover:bg-gray-200 active:bg-gray-300 border border-transparent hover:border-gray-200 transition-all duration-150 text-gray-500 hover:text-gray-800 cursor-pointer"
+            title={isMuted ? "ミュート解除" : "ミュート"}
+          >
+            {isMuted ? (
+              <VolumeX className="w-4 h-4 text-red-500 animate-pulse" />
+            ) : (
+              <Volume2 className="w-4 h-4 text-gray-600" />
+            )}
+          </button>
         </div>
 
         {gameState === "PLAYING" || gameState === "FEEDBACK" ? (
@@ -329,7 +382,10 @@ export default function App() {
                     return (
                       <button
                         key={theme.id}
-                        onClick={() => setSelectedTheme(theme.id as ThemeType)}
+                        onClick={() => {
+                          setSelectedTheme(theme.id as ThemeType);
+                          sound.playClick();
+                        }}
                         className={`flex items-start text-left p-4 rounded-xl border transition-all duration-200 group ${
                           selectedTheme === theme.id
                             ? "bg-gray-950 text-white border-gray-950 shadow-md"
@@ -368,7 +424,10 @@ export default function App() {
                 </div>
 
                 <button
-                  onClick={handleStartGame}
+                  onClick={() => {
+                    sound.playClick();
+                    handleStartGame();
+                  }}
                   className="w-full md:w-auto bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-950 px-8 py-4 rounded-xl font-bold text-base transition-colors shadow-sm flex items-center justify-center gap-2 group"
                 >
                   ゲームを開始する
@@ -554,7 +613,10 @@ export default function App() {
                   {/* Action Button */}
                   <div className="flex justify-end pt-2">
                     <button
-                      onClick={handleNextQuestion}
+                      onClick={() => {
+                        sound.playClick();
+                        handleNextQuestion();
+                      }}
                       className="bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-950 px-6 py-3 rounded-xl font-bold text-sm transition-colors shadow-sm flex items-center gap-2"
                     >
                       {currentQuestionIndex + 1 >= 6 || lives <= 0 ? "結果を確認する" : "次の問題へ進む"}
@@ -626,7 +688,10 @@ export default function App() {
               {/* Action area */}
               <div className="flex flex-col md:flex-row gap-3 justify-center">
                 <button
-                  onClick={() => setGameState("START")}
+                  onClick={() => {
+                    sound.playClick();
+                    setGameState("START");
+                  }}
                   className="w-full md:w-auto bg-gray-900 text-white hover:bg-gray-800 active:bg-gray-950 px-8 py-3.5 rounded-xl font-bold text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
                 >
                   <RotateCcw className="w-4 h-4" />
